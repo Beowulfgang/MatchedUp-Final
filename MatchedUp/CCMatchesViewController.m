@@ -108,8 +108,6 @@
     cell.textLabel.text = likedUser[@"profile"][@"firstName"];
     cell.detailTextLabel.text = chatroom[@"createdAt"];
     
-    //need a placeholder image here.
-    cell.imageView.image = [UIImage imageNamed:@"avatar-placeholder.png"];
     cell.imageView.contentMode = UIViewContentModeScaleAspectFit;
     
     PFQuery *queryForPhoto = [[PFQuery alloc] initWithClassName:@"Photo"];

@@ -17,6 +17,15 @@
                   clientKey:@"Sr8CdWo6f37yAkKHYJkxK77Ndcj56U0SsBulBRa0"];
     [PFFacebookUtils initializeFacebook];
     
+    [Mixpanel sharedInstanceWithToken:MIXPANEL_TOKEN];
+    
+    NSString *defaultPrefsFile = [[NSBundle mainBundle] pathForResource:@"defaultPrefsFile" ofType:@"plist"];
+    NSDictionary *defaultPreferences = [NSDictionary dictionaryWithContentsOfFile:defaultPrefsFile];
+    [[NSUserDefaults standardUserDefaults] registerDefaults:defaultPreferences];
+    
+    [[UINavigationBar appearance] setBarTintColor:[UIColor whiteColor]];
+    [[UINavigationBar appearance] setTitleTextAttributes:@{NSForegroundColorAttributeName : [UIColor colorWithRed:12/255.0 green:158/255.0 blue: 255/255.0 alpha:1.0], NSFontAttributeName : [UIFont fontWithName:@"HelveticaNeue-Light" size:20.0]}];
+    
     return YES;
 }
 

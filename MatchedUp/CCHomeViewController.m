@@ -10,18 +10,20 @@
 #import "CCTestUser.h"
 #import "CCProfileViewController.h"
 #import "CCMatchViewController.h"
+#import "CCTransitionAnimator.h"
 
-@interface CCHomeViewController () <CCMatchViewControllerDelegate>
+@interface CCHomeViewController () <CCMatchViewControllerDelegate, CCProfileViewControllerDelegate, UIViewControllerTransitioningDelegate>
 
 @property (strong, nonatomic) IBOutlet UIBarButtonItem *chatBarButtonItem;
 @property (strong, nonatomic) IBOutlet UIBarButtonItem *settingsBarButtonItem;
 @property (strong, nonatomic) IBOutlet UIImageView *photoImageView;
 @property (strong, nonatomic) IBOutlet UILabel *firstNameLabel;
 @property (strong, nonatomic) IBOutlet UILabel *ageLabel;
-@property (strong, nonatomic) IBOutlet UILabel *tagLineLabel;
 @property (strong, nonatomic) IBOutlet UIButton *likeButton;
 @property (strong, nonatomic) IBOutlet UIButton *infoButton;
 @property (strong, nonatomic) IBOutlet UIButton *dislikeButton;
+@property (strong, nonatomic) IBOutlet UIView *labelContainerView;
+@property (strong, nonatomic) IBOutlet UIView *buttonContainerView;
 
 @property (strong, nonatomic) NSArray *photos;
 @property (strong, nonatomic) PFObject *photo;
@@ -52,6 +54,15 @@
     
     //[CCTestUser saveTestUserToParse];
     
+    [self setupViews];
+}
+
+-(void)viewDidAppear:(BOOL)animated
+{
+    self.photoImageView.image = nil;
+    self.firstNameLabel.text = nil;
+    self.ageLabel.text = nil;
+    
     self.likeButton.enabled = NO;
     self.dislikeButton.enabled = NO;
     self.infoButton.enabled = NO;
@@ -64,14 +75,36 @@
     [query findObjectsInBackgroundWithBlock:^(NSArray *objects, NSError *error) {
         if (!error){
             self.photos = objects;
-            [self queryForCurrentPhotoIndex];
+            
+            if([self allowPhoto] == NO){
+                [self setupNextPhoto];
+            }
+            else {
+                [self queryForCurrentPhotoIndex];
+            }
         }
         else {
             NSLog(@"%@", error);
         }
     }];
+}
+
+- (void) setupViews
+{
+    self.view.backgroundColor = [UIColor colorWithRed:242/255.0 green:242/255.0 blue:242/255.0 alpha:1.0];
     
-    //do additional
+    [self addShadowForView:self.buttonContainerView];
+    [self addShadowForView:self.labelContainerView];
+    self.photoImageView.layer.masksToBounds = YES;
+}
+
+- (void)addShadowForView:(UIView *)view
+{
+    view.layer.masksToBounds = NO;
+    view.layer.cornerRadius = 4;
+    view.layer.shadowRadius = 1;
+    view.layer.shadowOffset = CGSizeMake(0, 1);
+    view.layer.shadowOpacity = 0.25;
     
 }
 
@@ -87,6 +120,7 @@
     {
         CCProfileViewController *profileVC = segue.destinationViewController;
         profileVC.photo = self.photo;
+        profileVC.delegate = self;
     }
     else if ([segue.identifier isEqualToString:@"homeToMatchSegue"]){
         CCMatchViewController *matchVC = segue.destinationViewController;
@@ -99,11 +133,23 @@
 
 - (IBAction)likeButtonPressed:(UIButton *)sender
 {
+    Mixpanel *mixpanel = [Mixpanel sharedInstance];
+    
+    [mixpanel track:@"Like"];
+    
+    [mixpanel flush];
+    
     [self checkLike];
 }
 
 - (IBAction)dislikeButtonPressed:(UIButton *)sender
 {
+    Mixpanel *mixpanel = [Mixpanel sharedInstance];
+    
+    [mixpanel track:@"Dislike"];
+    
+    [mixpanel flush];
+    
     [self checkDislike];
 }
 
@@ -153,8 +199,6 @@
             if (!error){
                 self.activities = [objects mutableCopy];
                 
-                NSLog(@"%@", self.activities);
-                
                 if ([self.activities count] == 0) {
                     self.isLikedByCurrentUser = NO;
                     self.isDislikedByCurrentUser = NO;
@@ -186,7 +230,6 @@
 {
     self.firstNameLabel.text = self.photo[kCCPhotoUserKey][kCCUserProfileKey][kCCUserProfileFirstNameKey];
     self.ageLabel.text = [NSString stringWithFormat:@"%@",self.photo[kCCPhotoUserKey][kCCUserProfileKey][kCCUserProfileAgeKey]];
-    self.tagLineLabel.text = self.photo[kCCPhotoUserKey][kCCUserTagLineKey];
 }
 
 - (void)setupNextPhoto
@@ -194,13 +237,50 @@
     if (self.currentPhotoIndex + 1 <self.photos.count)
     {
         self.currentPhotoIndex ++;
-        [self queryForCurrentPhotoIndex];
+        if ([self allowPhoto] == NO){
+            [self setupNextPhoto];
+        }
+        else {
+            [self queryForCurrentPhotoIndex];
+        }
     }
     else {
         UIAlertView *alert = [[UIAlertView alloc] initWithTitle:@"No More Users to View" message:@"Check Back Later for more People!" delegate:nil cancelButtonTitle:@"Ok" otherButtonTitles: nil];
         [alert show];
     }
 }
+
+- (BOOL)allowPhoto
+{
+    int maxAge = [[NSUserDefaults standardUserDefaults] integerForKey:kCCAgeMaxKey];
+    BOOL men = [[NSUserDefaults standardUserDefaults] boolForKey:kCCMenEnabledKey];
+    BOOL women = [[NSUserDefaults standardUserDefaults] boolForKey:kCCWomenEnabledKey];
+    BOOL single = [[NSUserDefaults standardUserDefaults] boolForKey:kCCSingleEnabledKey];
+    
+    PFObject *photo = self.photos[self.currentPhotoIndex];
+    PFUser *user = photo[kCCPhotoUserKey];
+    
+    int userAge = [user[kCCUserProfileKey][kCCUserProfileAgeKey] intValue];
+    NSString *gender = user[kCCUserProfileKey][kCCUserProfileGenderKey];
+    NSString *relationshipStatus = user[kCCUserProfileKey][kCCUserProfileRelationshipStatusKey];
+    
+    if (userAge > maxAge){
+        return NO;
+    }
+    else if (men == NO && [gender isEqualToString:@"male"]){
+        return NO;
+    }
+    else if (women == NO && [gender isEqualToString:@"female"]){
+        return NO;
+    }
+    else if (single == NO && ([relationshipStatus isEqualToString:@"single"] || relationshipStatus == nil)){
+        return NO;
+    }
+    else {
+        return YES;
+    }
+}
+
 
 - (void)saveLike
 {
@@ -235,9 +315,6 @@
 
 - (void)checkLike
 {
-    self.isLikedByCurrentUser ? NSLog(@"YES") : NSLog(@"NO");
-    self.isDislikedByCurrentUser ? NSLog(@"YES") : NSLog(@"NO");
-
     if (self.isLikedByCurrentUser) {
         [self setupNextPhoto];
         return;
@@ -274,10 +351,10 @@
 
 - (void)checkForChatRoom
 {
-    PFQuery *query = [PFQuery queryWithClassName:@"Activity"];
+    PFQuery *query = [PFQuery queryWithClassName:kCCActivityClassKey];
     [query whereKey:kCCActivityFromUserKey equalTo:self.photo[kCCPhotoUserKey]];
     [query whereKey:kCCActivityToUserKey equalTo:[PFUser currentUser]];
-    [query whereKey:@"type" equalTo:@"like"];
+    [query whereKey:kCCActivityTypeKey equalTo:kCCActivityTypeLikeKey];
     [query findObjectsInBackgroundWithBlock:^(NSArray *objects, NSError *error) {
         if (objects.count > 0) {
             [self createChatRoom];
@@ -287,23 +364,31 @@
 
 - (void)createChatRoom
 {
-    PFQuery *queryForChatRoom = [PFQuery queryWithClassName:@"ChatRoom"];
-    [queryForChatRoom whereKey:@"user1" equalTo:[PFUser currentUser]];
-    [queryForChatRoom whereKey:@"user2" equalTo:self.photo[kCCPhotoUserKey]];
-    PFQuery *queryForChatRoomInverse = [PFQuery queryWithClassName:@"ChatRoom"];
-    [queryForChatRoomInverse whereKey:@"user1" equalTo:self.photo[kCCPhotoUserKey]];
-    [queryForChatRoomInverse whereKey:@"user2" equalTo:[PFUser currentUser]];
+    PFQuery *queryForChatRoom = [PFQuery queryWithClassName:kCCChatRoomClassKey];
+    [queryForChatRoom whereKey:kCCChatRoomUser1Key equalTo:[PFUser currentUser]];
+    [queryForChatRoom whereKey:kCCChatRoomUser2Key equalTo:self.photo[kCCPhotoUserKey]];
+    PFQuery *queryForChatRoomInverse = [PFQuery queryWithClassName:kCCChatRoomClassKey];
+    [queryForChatRoomInverse whereKey:kCCChatRoomUser1Key equalTo:self.photo[kCCPhotoUserKey]];
+    [queryForChatRoomInverse whereKey:kCCChatRoomUser2Key equalTo:[PFUser currentUser]];
     PFQuery *combinedQuery = [PFQuery orQueryWithSubqueries:@[queryForChatRoom, queryForChatRoomInverse]];
     [combinedQuery findObjectsInBackgroundWithBlock:^(NSArray *chatRooms, NSError *error) {
         if (error){
             NSLog(@"%@", error);
         }
         else if (chatRooms.count == 0) {
-            PFObject *chatroom = [PFObject objectWithClassName:@"ChatRoom"];
-            [chatroom setObject:[PFUser currentUser] forKey:@"user1"];
-            [chatroom setObject:self.photo[kCCPhotoUserKey] forKey:@"user2"];
+            PFObject *chatroom = [PFObject objectWithClassName:kCCChatRoomClassKey];
+            [chatroom setObject:[PFUser currentUser] forKey:kCCChatRoomUser1Key];
+            [chatroom setObject:self.photo[kCCPhotoUserKey] forKey:kCCChatRoomUser2Key];
             [chatroom saveInBackgroundWithBlock:^(BOOL succeeded, NSError *error) {
-                [self performSegueWithIdentifier:@"homeToMatchSegue" sender:nil];
+
+                UIStoryboard *myStoryboard = self.storyboard;
+                CCMatchViewController *matchViewController = [myStoryboard instantiateViewControllerWithIdentifier:@"matchVC"];
+                matchViewController.view.backgroundColor = [UIColor colorWithRed:0/255.0 green:0/255.0 blue:0/255.0 alpha:.75];
+                matchViewController.transitioningDelegate = self;
+                matchViewController.matchedUserImage = self.photoImageView.image;
+                matchViewController.delegate = self;
+                matchViewController.modalPresentationStyle = UIModalPresentationCustom;
+                [self presentViewController:matchViewController animated:YES completion:nil];
             }];
         }
     }];
@@ -317,6 +402,44 @@
         [self performSegueWithIdentifier:@"homeToMatchesSegue" sender:nil];
     }];
 }
+
+#pragma mark - CCProfileViewController Delegate
+
+-(void)didPressLike
+{
+    [self.navigationController popViewControllerAnimated:NO];
+    
+    [self checkLike];
+}
+
+-(void)didPressDislike
+{
+    [self.navigationController popViewControllerAnimated:NO];
+    
+    [self checkDislike];
+}
+
+#pragma mark - UIViewControllerTransitioningDelegate
+
+-(id<UIViewControllerAnimatedTransitioning>)animationControllerForPresentedController:(UIViewController *)presented presentingController:(UIViewController *)presenting sourceController:(UIViewController *)source
+{
+    CCTransitionAnimator *animator = [[CCTransitionAnimator alloc] init];
+    animator.presenting = YES;
+    return animator;
+}
+
+-(id<UIViewControllerAnimatedTransitioning>)animationControllerForDismissedController:(UIViewController *)dismissed
+{
+    CCTransitionAnimator *animator = [[CCTransitionAnimator alloc] init];
+    return animator;
+}
+
+
+
+
+
+
+
 
 
 @end

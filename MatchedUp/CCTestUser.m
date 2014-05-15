@@ -22,7 +22,6 @@
             [newUser setObject:profile forKey:@"profile"];
             [newUser saveInBackgroundWithBlock:^(BOOL succeeded, NSError *error) {
                 UIImage *profileImage = [UIImage imageNamed:@"ProfileImage1.jpeg"];
-                NSLog(@"%@", profileImage);
                 NSData *imageData = UIImageJPEGRepresentation(profileImage, 0.8);
                 PFFile *photoFile = [PFFile fileWithData:imageData];
                 [photoFile saveInBackgroundWithBlock:^(BOOL succeeded, NSError *error) {

@@ -15,5 +15,7 @@
     #import <Foundation/Foundation.h>
     #import <Parse/Parse.h>
     #import "CCConstants.h"
+    #import <Mixpanel.h>
+#define MIXPANEL_TOKEN @"cf1c3b0cc9331549116820a9e804ffaa"
 
 #endif
